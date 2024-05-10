@@ -287,15 +287,21 @@ public void Player_SetZoneEditingStage(int client, int value)
 
 float ZoneEditStartPos[MAXPLAYERS + 1][3];
 
-public void Player_GetZoneEditStartPos(int client, float[3] pos)
+public void Player_GetZoneEditStartPos(int client, float pos[3])
 {
-	pos = ZoneEditStartPos[client];
+    pos[0] = ZoneEditStartPos[client][0];
+    pos[1] = ZoneEditStartPos[client][1];
+    pos[2] = ZoneEditStartPos[client][2];
 }
 
-public void Player_SetZoneEditStartPos(int client, float[3] value)
+public void Player_SetZoneEditStartPos(int client, float value[3])
 {
-	ZoneEditStartPos[client] = value;
+    ZoneEditStartPos[client][0] = value[0];
+    ZoneEditStartPos[client][1] = value[1];
+    ZoneEditStartPos[client][2] = value[2];
 }
+
+
 
 /*
 	==============================================================
@@ -303,30 +309,35 @@ public void Player_SetZoneEditStartPos(int client, float[3] value)
 
 float ZoneEditEndPos[MAXPLAYERS + 1][3];
 
-public void Player_GetZoneEditEndPos(int client, float[3] pos)
+public void Player_GetZoneEditEndPos(int client, float pos[3])
 {
-	pos = ZoneEditEndPos[client];
+    pos[0] = ZoneEditEndPos[client][0];
+    pos[1] = ZoneEditEndPos[client][1];
+    pos[2] = ZoneEditEndPos[client][2];
 }
 
-public void Player_SetZoneEditEndPos(int client, float[3] value)
+public void Player_SetZoneEditEndPos(int client, float value[3])
 {
-	ZoneEditEndPos[client] = value;
+    ZoneEditEndPos[client][0] = value[0];
+    ZoneEditEndPos[client][1] = value[1];
+    ZoneEditEndPos[client][2] = value[2];
 }
 
 /*
 	==============================================================
 */
 
-public void Player_GetZoneEditBoxMinMax(int client, float[3] min, float[3] max)
+public void Player_GetZoneEditBoxMinMax(int client, float min[3], float max[3])
 {
-	float startpos[3];
-	float endpos[3];
-	Player_GetZoneEditStartPos(client, startpos);
-	Player_GetZoneEditEndPos(client, endpos);
-	
-	MinVector(startpos, endpos, min);
-	MaxVector(startpos, endpos, max);
+    float startpos[3];
+    float endpos[3];
+    Player_GetZoneEditStartPos(client, startpos);  
+    Player_GetZoneEditEndPos(client, endpos);     
+    
+    MinVector(startpos, endpos, min);  
+    MaxVector(startpos, endpos, max);  
 }
+
 
 /*
 	==============================================================
