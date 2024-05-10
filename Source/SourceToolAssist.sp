@@ -9,7 +9,7 @@
 #include <sdktools>
 
 /*
-	https://forums.alliedmods.net/showthread.php?t=247770
+    https://forums.alliedmods.net/showthread.php?t=247770
 */
 #include <multicolors>
 
@@ -28,11 +28,11 @@
 
 public Plugin myinfo = 
 {
-	name = "Source Tool Assist",
-	author = "crashfort",
-	description = "",
-	version = "4",
-	url = "https://google.se"
+    name = "Source Tool Assist",
+    author = "crashfort",
+    description = "",
+    version = "4",
+    url = "https://google.se"
 };
 
 #define BOT_Count 1
@@ -40,537 +40,540 @@ int BotIDs[BOT_Count];
 
 public void ResetPlayerReplaySegment(int client)
 {
-	if (!IsClientInGame(client))
-	{
-		return;
-	}
-	
-	Player_SetIsSegmenting(client, false);
-	Player_SetIsRewinding(client, false);
-	Player_SetHasRun(client, false);
-	Player_SetPlayingReplay(client, false);
-	
-	/*
-		Don't change the observer move type if they are in spec,
-		it will make them bounce all over the place
-	*/
-	if (IsPlayingOnTeam(client))
-	{
-		SetEntityMoveType(client, MOVETYPE_WALK);	
-	}
-	
-	Player_SetRewindFrame(client, 0);
-	
-	Player_DeleteRecordFrames(client);
-	
-	if (Player_GetLinkedBotIndex(client) != 0)
-	{
-		RemoveBotFromPlayer(client);
-	}
+    if (!IsClientInGame(client))
+    {
+        return;
+    }
+    
+    Player_SetIsSegmenting(client, false);
+    Player_SetIsRewinding(client, false);
+    Player_SetHasRun(client, false);
+    Player_SetPlayingReplay(client, false);
+    
+    /*
+        Don't change the observer move type if they are in spec,
+        it will make them bounce all over the place
+    */
+    if (IsPlayingOnTeam(client))
+    {
+        SetEntityMoveType(client, MOVETYPE_WALK);    
+    }
+    
+    Player_SetRewindFrame(client, 0);
+    
+    Player_DeleteRecordFrames(client);
+    
+    if (Player_GetLinkedBotIndex(client) != 0)
+    {
+        RemoveBotFromPlayer(client);
+    }
 }
 
 /*
-	Could do something clever here in case there are multiple players
+    Could do something clever here in case there are multiple players
 */
 public int GetFreeBotID()
 {
-	return 0;
+    return 0;
 }
 
 public void CreateBotForPlayer(int client)
 {
-	int index = BotIDs[GetFreeBotID()];
-	
-	if (index == 0)
-	{
-		return;
-	}
-	
-	Player_SetLinkedBotIndex(client, index);
-	Bot_SetLinkedPlayerIndex(index, client);
-	
-	bool onteam = IsPlayingOnTeam(client);
-	
-	/*
-		Bots should join the same team as their player if they are on a team
-	*/
-	if (onteam)
-	{
-		ChangeClientTeam(index, GetClientTeam(client));	
-	}
-	
-	else
-	{
-		ChangeClientTeam(index, CS_TEAM_T);
-	}
-	
-	CS_RespawnPlayer(index);
-	
-	SetEntityRenderMode(index, RENDER_TRANSADD);
-	SetEntityRenderColor(index, 255, 255, 255, 100);
-	
-	/*
-		Having a bot in noclip and zero gravity ensures it's smooth
-	*/
-	SetEntityMoveType(index, MOVETYPE_NOCLIP);
-	SetEntityGravity(index, 0.0);
+    int index = BotIDs[GetFreeBotID()];
+    
+    if (index == 0)
+    {
+        return;
+    }
+    
+    Player_SetLinkedBotIndex(client, index);
+    Bot_SetLinkedPlayerIndex(index, client);
+    
+    bool onteam = IsPlayingOnTeam(client);
+    
+    /*
+        Bots should join the same team as their player if they are on a team
+    */
+    if (onteam)
+    {
+        ChangeClientTeam(index, GetClientTeam(client));    
+    }
+    
+    else
+    {
+        ChangeClientTeam(index, CS_TEAM_T);
+    }
+    
+    CS_RespawnPlayer(index);
+    
+    SetEntityRenderMode(index, RENDER_TRANSADD);
+    SetEntityRenderColor(index, 255, 255, 255, 100);
+    
+    /*
+        Having a bot in noclip and zero gravity ensures it's smooth
+    */
+    SetEntityMoveType(index, MOVETYPE_NOCLIP);
+    SetEntityGravity(index, 0.0);
 }
 
 public void RemoveBotFromPlayer(int client)
 {
-	int fakeid = Player_GetLinkedBotIndex(client);
-	ChangeClientTeam(fakeid, CS_TEAM_SPECTATOR);
+    int fakeid = Player_GetLinkedBotIndex(client);
+    ChangeClientTeam(fakeid, CS_TEAM_SPECTATOR);
 }
 
 public int MenuHandler_ReplaySelect(Menu menu, MenuAction action, int param1, int param2)
 {
-	int client = param1;
+    int client = param1;
 
-	if (action == MenuAction_Select)
-	{
-		/*
-			"info" is the filename including extension
-		*/
-		char info[512];
-		bool found = GetMenuItem(menu, param2, info, sizeof(info));
-		
-		if (!found)
-		{
-			return;
-		}
-		
-		char mapbuf[MAX_NAME_LENGTH];
-		GetCurrentMap(mapbuf, sizeof(mapbuf));
-		
-		char filepath[PLATFORM_MAX_PATH];
-		BuildPath(Path_SM, filepath, sizeof(filepath), "%s/%s/%s/%s", STA_RootPath, STA_ReplayFolder, mapbuf, info);
-		
-		File file = OpenFile(filepath, "rb");
-		
-		if (file == null)
-		{
-			STA_PrintMessageToClient(client, "\"%s\" could not be opened", info);
-			return;
-		}
-		
-		ResetPlayerReplaySegment(client);
-		
-		int framecount;		
-		ReadFileCell(file, framecount, 4);
-		
-		//PrintToChat(client, "%d frames", framecount);
-		
-		Player_CreateFrameArray(client);
-		
-		any frameinfo[FRAME_Length];
-			
-		for (int i = 0; i < framecount; ++i)
-		{			
-			ReadFile(file, frameinfo, sizeof(frameinfo), 4);
-			
-			Player_PushFrame(client, frameinfo);
-		}
-		
-		delete file;
-		
-		STA_PrintMessageToClient(client, "Loaded replay \"%s\"", info);
-		
-		Player_SetHasRun(client, true);
-		
-		STA_OpenSegmentReplayMenu(client);
-	}
-	
-	else if (action == MenuAction_Cancel)
-	{
-		
-	}
-	
-	else if (action == MenuAction_End)
-	{		
-		delete menu;
-	}
+    if (action == MenuAction_Select)
+    {
+        /*
+            "info" is the filename including extension
+        */
+        char info[512];
+        bool found = GetMenuItem(menu, param2, info, sizeof(info));
+        
+        if (!found)
+        {
+            return 0;
+        }
+        
+        char mapbuf[MAX_NAME_LENGTH];
+        GetCurrentMap(mapbuf, sizeof(mapbuf));
+        
+        char filepath[PLATFORM_MAX_PATH];
+        BuildPath(Path_SM, filepath, sizeof(filepath), "%s/%s/%s/%s", STA_RootPath, STA_ReplayFolder, mapbuf, info);
+        
+        File file = OpenFile(filepath, "rb");
+        
+        if (file == null)
+        {
+            STA_PrintMessageToClient(client, "\"%s\" could not be opened", info);
+            return 0;
+        }
+        
+        ResetPlayerReplaySegment(client);
+        
+        int framecount;        
+        ReadFileCell(file, framecount, 4);
+        
+        //PrintToChat(client, "%d frames", framecount);
+        
+        Player_CreateFrameArray(client);
+        
+        any frameinfo[FRAME_Length];
+            
+        for (int i = 0; i < framecount; ++i)
+        {            
+            ReadFile(file, frameinfo, sizeof(frameinfo), 4);
+            
+            Player_PushFrame(client, frameinfo);
+        }
+        
+        delete file;
+        
+        STA_PrintMessageToClient(client, "Loaded replay \"%s\"", info);
+        
+        Player_SetHasRun(client, true);
+        
+        STA_OpenSegmentReplayMenu(client);
+    }
+    
+    else if (action == MenuAction_Cancel)
+    {
+        // No action needed
+    }
+    
+    else if (action == MenuAction_End)
+    {        
+        delete menu;
+    }
+    
+    return 0;
 }
 
 public int MenuHandler_SegmentReplay(Menu menu, MenuAction action, int param1, int param2)
 {
-	int client = param1;
-	
-	if (action == MenuAction_Select)
-	{
-		char info[3];
-		bool found = GetMenuItem(menu, param2, info, sizeof(info));
-		
-		if (!found)
-		{
-			return;
-		}
-		
-		int itemid = StringToInt(info);
-		
-		switch (itemid)
-		{
-			case SEG_Start:
-			{
-				//PrintToChat(client, "%s", SEG_Start);
-			
-				STA_PrintMessageToClient(client, "Started recording replay");
-				
-				Player_SetIsSegmenting(client, true);
-				Player_SetIsRewinding(client, false);
-				Player_SetHasRun(client, false);
-				Player_SetPlayingReplay(client, false);
-				
-				Player_CreateFrameArray(client);
-				Player_SetRewindFrame(client, 0);
-				
-				STA_OpenSegmentReplayMenu(client);
-			}
-			
-			case SEG_LoadFromFile:
-			{
-				//PrintToChat(client, "%s", SEG_LoadFromFile);
-			
-				char mapbuf[MAX_NAME_LENGTH];
-				GetCurrentMap(mapbuf, sizeof(mapbuf));
-				
-				char mapreplaybuf[PLATFORM_MAX_PATH];
-				BuildPath(Path_SM, mapreplaybuf, sizeof(mapreplaybuf), "%s/%s/%s", STA_RootPath, STA_ReplayFolder, mapbuf);
-				
-				if (!DirExists(mapreplaybuf))
-				{
-					STA_PrintMessageToClient(client, "No replays available for \"%s\"", mapbuf);
-					return;
-				}
-				
-				DirectoryListing dirlist = OpenDirectory(mapreplaybuf);
-				
-				if (dirlist == null)
-				{
-					STA_PrintMessageToClient(client, "Could not open STA directory path");
-					return;
-				}
-				
-				FileType curtype;
-				char curname[512];
-				int index = 0;
-				
-				Menu selectmenu = CreateMenu(MenuHandler_ReplaySelect);
-				SetMenuTitle(selectmenu, "Replay File Select");
-				
-				while (dirlist.GetNext(curname, sizeof(curname), curtype))
-				{
-					if (curtype != FileType_File)
-						continue;
+    int client = param1;
+    
+    if (action == MenuAction_Select)
+    {
+        char info[3];
+        bool found = GetMenuItem(menu, param2, info, sizeof(info));
+        
+        if (!found)
+        {
+            return 0;
+        }
+        
+        int itemid = StringToInt(info);
+        
+        switch (itemid)
+        {
+            case SEG_Start:
+            {
+                //PrintToChat(client, "%s", SEG_Start);
+            
+                STA_PrintMessageToClient(client, "Started recording replay");
+                
+                Player_SetIsSegmenting(client, true);
+                Player_SetIsRewinding(client, false);
+                Player_SetHasRun(client, false);
+                Player_SetPlayingReplay(client, false);
+                
+                Player_CreateFrameArray(client);
+                Player_SetRewindFrame(client, 0);
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case SEG_LoadFromFile:
+            {
+                //PrintToChat(client, "%s", SEG_LoadFromFile);
+            
+                char mapbuf[MAX_NAME_LENGTH];
+                GetCurrentMap(mapbuf, sizeof(mapbuf));
+                
+                char mapreplaybuf[PLATFORM_MAX_PATH];
+                BuildPath(Path_SM, mapreplaybuf, sizeof(mapreplaybuf), "%s/%s/%s", STA_RootPath, STA_ReplayFolder, mapbuf);
+                
+                if (!DirExists(mapreplaybuf))
+                {
+                    STA_PrintMessageToClient(client, "No replays available for \"%s\"", mapbuf);
+                    return 0;
+                }
+                
+                DirectoryListing dirlist = OpenDirectory(mapreplaybuf);
+                
+                if (dirlist == null)
+                {
+                    STA_PrintMessageToClient(client, "Could not open STA directory path");
+                    return 0;
+                }
+                
+                FileType curtype;
+                char curname[512];
+                int index = 0;
+                
+                Menu selectmenu = CreateMenu(MenuHandler_ReplaySelect);
+                SetMenuTitle(selectmenu, "Replay File Select");
+                
+                while (dirlist.GetNext(curname, sizeof(curname), curtype))
+                {
+                    if (curtype != FileType_File)
+                        continue;
 
-					AddMenuItem(selectmenu, curname, curname);
-					index++;
-				}
+                    AddMenuItem(selectmenu, curname, curname);
+                    index++;
+                }
 
-				delete dirlist;
+                delete dirlist;
 
-				if (index == 0)
-				{
-					STA_PrintMessageToClient(client, "No replays available");
-					return;
-				}
-				
-				DisplayMenu(selectmenu, client, MENU_TIME_FOREVER);
-			}
-			
-			case MOV_SaveToFile:
-			{
-				//PrintToChat(client, "%s", MOV_SaveToFile);
-			
-				char mapbuf[MAX_NAME_LENGTH];
-				GetCurrentMap(mapbuf, sizeof(mapbuf));
-				
-				char playernamebuf[MAX_NAME_LENGTH];
-				GetClientName(client, playernamebuf, sizeof(playernamebuf));
-				
-				char newdirbuf[PLATFORM_MAX_PATH];
-				BuildPath(Path_SM, newdirbuf, sizeof(newdirbuf), "%s/%s/%s", STA_RootPath, STA_ReplayFolder, mapbuf);
-				
-				if (!DirExists(newdirbuf))
-					CreateDirectory(newdirbuf, 511);
-				
-				int steamid = GetSteamAccountID(client);
-				
-				char timebuf[128];
-				FormatTime(timebuf, sizeof(timebuf), "%Y %m %d, %H %M %S");
-				
-				char namebuf[256];
-				FormatEx(namebuf, sizeof(namebuf), "[%d] %s (%s)", steamid, playernamebuf, timebuf);
-				
-				char filename[PLATFORM_MAX_PATH];
-				FormatEx(filename, sizeof(filename), "%s/%s.STA", newdirbuf, namebuf);
-				
-				File file = OpenFile(filename, "wb");
-				
-				if (file == null)
-				{
-					STA_PrintMessageToClient(client, "Could not save replay");
-					return;
-				}
-				
-				int framecount = Player_GetRecordedFramesCount(client);
-				WriteFileCell(file, framecount, 4);
-				
-				any frameinfo[FRAME_Length];
-				
-				for (int i = 0; i < framecount; ++i)
-				{
-					Player_GetFrame(client, i, frameinfo);
-					
-					for (int j = 0; j < FRAME_Length; ++j)
-					{
-						WriteFileCell(file, frameinfo[j], 4);
-					}
-				}
-				
-				delete file;
-				
-				STA_PrintMessageToClient(client, "Saved as \"%s\"", namebuf);
-				
-				STA_OpenSegmentReplayMenu(client);
-			}
-			
-			case SEG_Resume:
-			{
-				//PrintToChat(client, "%s", SEG_Resume);
-				
-				Player_SetIsRewinding(client, false);
-				SetEntityMoveType(client, MOVETYPE_WALK);
-				
-				Player_SetLastPausedTick(client, Player_GetRewindFrame(client));
-				
-				Player_ResizeRecordFrameList(client, Player_GetRewindFrame(client));
-				
-				STA_OpenSegmentReplayMenu(client);				
-			}
-			
-			case SEG_Pause:
-			{
-				//PrintToChat(client, "%s", SEG_Pause);
-				
-				Player_SetIsRewinding(client, true);				
-				SetEntityMoveType(client, MOVETYPE_NONE);
-				
-				//Player_SetRewindFrame(client, Player_GetRecordedFramesCount(client) - 1);
-				
-				STA_OpenSegmentReplayMenu(client);
-			}
-			
-			case SEG_GoBack:
-			{
-				//PrintToChat(client, "%s", SEG_GoBack);
-				
-				int newframe = Player_GetLastPausedTick(client);
-				
-				newframe = Player_ClampRecordFrame(client, newframe);
-				
-				Player_SetRewindFrame(client, newframe);
-				
-				Player_SetIsRewinding(client, true);				
-				SetEntityMoveType(client, MOVETYPE_NONE);
-				
-				STA_OpenSegmentReplayMenu(client);
-			}
-			
-			case SEG_Play:
-			{
-				//PrintToChat(client, "%s", SEG_Play);
-				
-				Player_SetPlayingReplay(client, true);
-				Player_SetRewindFrame(client, 0);
-				
-				CreateBotForPlayer(client);
-				
-				bool onteam = IsPlayingOnTeam(client);
-				
-				if (!onteam)
-				{
-					Player_SetPreferredTeam(client, CS_TEAM_T);
-				}
-				
-				else
-				{
-					Player_SetPreferredTeam(client, GetClientTeam(client));
-					
-					ChangeClientTeam(client, CS_TEAM_SPECTATOR);
-					SetEntDataEnt2(client, Offset_ObserverTarget, Player_GetLinkedBotIndex(client), true);
-					SetEntData(client, Offset_ObserverMode, 3, 4, true);
-				}
-							
-				STA_OpenSegmentReplayMenu(client);			
-			}
-			
-			case SEG_Stop:
-			{
-				//PrintToChat(client, "%s", SEG_Stop);
-				
-				Player_SetHasRun(client, true);
-				Player_SetIsSegmenting(client, false);
-				Player_SetIsRewinding(client, false);
-				Player_SetPlayingReplay(client, false);
-				
-				SetEntityMoveType(client, MOVETYPE_WALK);
-				
-				STA_OpenSegmentReplayMenu(client);			
-			}
-			
-			case MOV_Resume:
-			{
-				//PrintToChat(client, "%s", MOV_Resume);
-			
-				Player_SetIsRewinding(client, false);
-				
-				SetEntityMoveType(client, MOVETYPE_WALK);
-				
-				STA_OpenSegmentReplayMenu(client);
-			}
-			
-			case MOV_NewFrom:
-			{
-				//PrintToChat(client, "%s", MOV_NewFrom);
-				
-				/*
-					This reuses the active frame's data as the start for the new run
-				*/
-				
-				any frameinfo[FRAME_Length];
-				
-				int frame = Player_GetRewindFrame(client);
-				Player_GetFrame(client, frame, frameinfo);
-				
-				ResetPlayerReplaySegment(client);
+                if (index == 0)
+                {
+                    STA_PrintMessageToClient(client, "No replays available");
+                    return 0;
+                }
+                
+                DisplayMenu(selectmenu, client, MENU_TIME_FOREVER);
+            }
+            
+            case MOV_SaveToFile:
+            {
+                //PrintToChat(client, "%s", MOV_SaveToFile);
+            
+                char mapbuf[MAX_NAME_LENGTH];
+                GetCurrentMap(mapbuf, sizeof(mapbuf));
+                
+                char playernamebuf[MAX_NAME_LENGTH];
+                GetClientName(client, playernamebuf, sizeof(playernamebuf));
+                
+                char newdirbuf[PLATFORM_MAX_PATH];
+                BuildPath(Path_SM, newdirbuf, sizeof(newdirbuf), "%s/%s/%s", STA_RootPath, STA_ReplayFolder, mapbuf);
+                
+                if (!DirExists(newdirbuf))
+                    CreateDirectory(newdirbuf, 511);
+                
+                int steamid = GetSteamAccountID(client);
+                
+                char timebuf[128];
+                FormatTime(timebuf, sizeof(timebuf), "%Y %m %d, %H %M %S");
+                
+                char namebuf[256];
+                FormatEx(namebuf, sizeof(namebuf), "[%d] %s (%s)", steamid, playernamebuf, timebuf);
+                
+                char filename[PLATFORM_MAX_PATH];
+                FormatEx(filename, sizeof(filename), "%s/%s.STA", newdirbuf, namebuf);
+                
+                File file = OpenFile(filename, "wb");
+                
+                if (file == null)
+                {
+                    STA_PrintMessageToClient(client, "Could not save replay");
+                    return 0;
+                }
+                
+                int framecount = Player_GetRecordedFramesCount(client);
+                WriteFileCell(file, framecount, 4);
+                
+                any frameinfo[FRAME_Length];
+                
+                for (int i = 0; i < framecount; ++i)
+                {
+                    Player_GetFrame(client, i, frameinfo);
+                    
+                    for (int j = 0; j < FRAME_Length; ++j)
+                    {
+                        WriteFileCell(file, frameinfo[j], 4);
+                    }
+                }
+                
+                delete file;
+                
+                STA_PrintMessageToClient(client, "Saved as \"%s\"", namebuf);
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case SEG_Resume:
+            {
+                //PrintToChat(client, "%s", SEG_Resume);
+                
+                Player_SetIsRewinding(client, false);
+                SetEntityMoveType(client, MOVETYPE_WALK);
+                
+                Player_SetLastPausedTick(client, Player_GetRewindFrame(client));
+                
+                Player_ResizeRecordFrameList(client, Player_GetRewindFrame(client));
+                
+                STA_OpenSegmentReplayMenu(client);                
+            }
+            
+            case SEG_Pause:
+            {
+                //PrintToChat(client, "%s", SEG_Pause);
+                
+                Player_SetIsRewinding(client, true);                
+                SetEntityMoveType(client, MOVETYPE_NONE);
+                
+                //Player_SetRewindFrame(client, Player_GetRecordedFramesCount(client) - 1);
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case SEG_GoBack:
+            {
+                //PrintToChat(client, "%s", SEG_GoBack);
+                
+                int newframe = Player_GetLastPausedTick(client);
+                
+                newframe = Player_ClampRecordFrame(client, newframe);
+                
+                Player_SetRewindFrame(client, newframe);
+                
+                Player_SetIsRewinding(client, true);                
+                SetEntityMoveType(client, MOVETYPE_NONE);
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case SEG_Play:
+            {
+                //PrintToChat(client, "%s", SEG_Play);
+                
+                Player_SetPlayingReplay(client, true);
+                Player_SetRewindFrame(client, 0);
+                
+                CreateBotForPlayer(client);
+                
+                bool onteam = IsPlayingOnTeam(client);
+                
+                if (!onteam)
+                {
+                    Player_SetPreferredTeam(client, CS_TEAM_T);
+                }
+                
+                else
+                {
+                    Player_SetPreferredTeam(client, GetClientTeam(client));
+                    
+                    ChangeClientTeam(client, CS_TEAM_SPECTATOR);
+                    SetEntDataEnt2(client, Offset_ObserverTarget, Player_GetLinkedBotIndex(client), true);
+                    SetEntData(client, Offset_ObserverMode, 3, 4, true);
+                }
+                            
+                STA_OpenSegmentReplayMenu(client);            
+            }
+            
+            case SEG_Stop:
+            {
+                //PrintToChat(client, "%s", SEG_Stop);
+                
+                Player_SetHasRun(client, true);
+                Player_SetIsSegmenting(client, false);
+                Player_SetIsRewinding(client, false);
+                Player_SetPlayingReplay(client, false);
+                
+                SetEntityMoveType(client, MOVETYPE_WALK);
+                
+                STA_OpenSegmentReplayMenu(client);            
+            }
+            
+            case MOV_Resume:
+            {
+                //PrintToChat(client, "%s", MOV_Resume);
+            
+                Player_SetIsRewinding(client, false);
+                
+                SetEntityMoveType(client, MOVETYPE_WALK);
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case MOV_NewFrom:
+            {
+                //PrintToChat(client, "%s", MOV_NewFrom);
+                
+                /*
+                    This reuses the active frame's data as the start for the new run
+                */
+                
+                any frameinfo[FRAME_Length];
+                
+                int frame = Player_GetRewindFrame(client);
+                Player_GetFrame(client, frame, frameinfo);
+                
+                ResetPlayerReplaySegment(client);
 
-				Player_SetIsSegmenting(client, true);
-				Player_SetIsRewinding(client, true);
-				Player_SetHasRun(client, true);
-				Player_SetPlayingReplay(client, true);
-				
-				Player_CreateFrameArray(client);
-				Player_SetRewindFrame(client, 0);
-				
-				Player_PushFrame(client, frameinfo);
-				
-				/*
-					Forcing a teamchange like this does open the "select character" menu but does not
-					kill the player upon choosing
-				*/
-				ChangeClientTeam(client, Player_GetPreferredTeam(client));
-				
-				SetEntityMoveType(client, MOVETYPE_NONE);
-				
-				STA_OpenSegmentReplayMenu(client);			
-			}
-			
-			case MOV_Stop:
-			{
-				//PrintToChat(client, "%s", MOV_Stop);
-				
-				Player_SetHasRun(client, true);
-				Player_SetIsSegmenting(client, false);
-				Player_SetIsRewinding(client, false);
-				Player_SetPlayingReplay(client, false);
-				
-				RemoveBotFromPlayer(client);			
-				
-				STA_OpenSegmentReplayMenu(client);				
-			}
-			
-			case MOV_Pause:
-			{
-				//PrintToChat(client, "%s", MOV_Pause);
-				
-				Player_SetIsRewinding(client, true);
-				
-				STA_OpenSegmentReplayMenu(client);				
-			}
-			
-			case MOV_ContinueFrom:
-			{
-				//PrintToChat(client, "%s", MOV_ContinueFrom);
-				
-				//PrintToChat(client, "0: %d %d", RecordFramesList[client].Length, CurrentRewindFrame[client]);
-				
-				int endframe = Player_GetRewindFrame(client) + 1;
-				int framecount = Player_GetRecordedFramesCount(client) - 1;
-				
-				if (endframe > framecount)
-				{
-					endframe = framecount;
-				}
-				
-				/*
-					Truncate anything past this point if we are not at the end
-				*/
-				Player_ResizeRecordFrameList(client, endframe);
-				
-				Player_SetIsSegmenting(client, true);
-				Player_SetIsRewinding(client, true);
-				Player_SetHasRun(client, false);
-				Player_SetPlayingReplay(client, false);
-				
-				Player_SetRewindFrame(client, endframe - 1);
-				
-				//PrintToChat(client, "1: %d %d", RecordFramesList[client].Length, CurrentRewindFrame[client]);
-				
-				ChangeClientTeam(client, Player_GetPreferredTeam(client));
-				SetEntityMoveType(client, MOVETYPE_NONE);
-				
-				RemoveBotFromPlayer(client);
-				
-				STA_OpenSegmentReplayMenu(client);				
-			}
-			
-			case ALL_RewindSpeed:
-			{
-				//PrintToChat(client, "%s", ALL_RewindSpeed);
-				
-				int curspeed = Player_GetRewindSpeed(client);
-				
-				curspeed *= 2;
-				
-				if (curspeed > 32)
-				{
-					curspeed = 1;
-				}
-				
-				Player_SetRewindSpeed(client, curspeed);
-				
-				STA_OpenSegmentReplayMenu(client);				
-			}
-			
-			case ALL_JumpToStart:
-			{
-				//PrintToChat(client, "%s", ALL_JumpToStart);
-			
-				Player_SetRewindFrame(client, 0);
-				
-				STA_OpenSegmentReplayMenu(client);
-			}
-			
-			case ALL_JumpToEnd:
-			{
-				//PrintToChat(client, "%s", ALL_JumpToEnd);
-				
-				Player_SetRewindFrame(client, Player_GetRecordedFramesCount(client) - 1);
-				
-				STA_OpenSegmentReplayMenu(client);				
-			}
-		}
-	}
-	
-	else if (action == MenuAction_Cancel)
-	{
-		ResetPlayerReplaySegment(client);
-	}
-	
-	else if (action == MenuAction_End)
-	{		
-		delete menu;
-	}
+                Player_SetIsSegmenting(client, true);
+                Player_SetIsRewinding(client, true);
+                Player_SetHasRun(client, true);
+                Player_SetPlayingReplay(client, true);
+                
+                Player_CreateFrameArray(client);
+                Player_SetRewindFrame(client, 0);
+                
+                Player_PushFrame(client, frameinfo);
+                
+                /*
+                    Forcing a teamchange like this does open the "select character" menu but does not
+                    kill the player upon choosing
+                */
+                ChangeClientTeam(client, Player_GetPreferredTeam(client));
+                
+                SetEntityMoveType(client, MOVETYPE_NONE);
+                
+                STA_OpenSegmentReplayMenu(client);            
+            }
+            
+            case MOV_Stop:
+            {
+                //PrintToChat(client, "%s", MOV_Stop);
+                
+                Player_SetHasRun(client, true);
+                Player_SetIsSegmenting(client, false);
+                Player_SetIsRewinding(client, false);
+                Player_SetPlayingReplay(client, false);
+                
+                RemoveBotFromPlayer(client);            
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case MOV_Pause:
+            {
+                //PrintToChat(client, "%s", MOV_Pause);
+                
+                Player_SetIsRewinding(client, true);
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case MOV_ContinueFrom:
+            {
+                //PrintToChat(client, "%s", MOV_ContinueFrom);
+                
+                //PrintToChat(client, "0: %d %d", RecordFramesList[client].Length, CurrentRewindFrame[client]);
+                
+                int endframe = Player_GetRewindFrame(client) + 1;
+                int framecount = Player_GetRecordedFramesCount(client) - 1;
+                
+                if (endframe > framecount)
+                {
+                    endframe = framecount;
+                }
+                
+                /*
+                    Truncate anything past this point if we are not at the end
+                */
+                Player_ResizeRecordFrameList(client, endframe);
+                
+                Player_SetIsSegmenting(client, true);
+                Player_SetIsRewinding(client, true);
+                Player_SetHasRun(client, false);
+                Player_SetPlayingReplay(client, false);
+                
+                Player_SetRewindFrame(client, endframe - 1);
+                
+                //PrintToChat(client, "1: %d %d", RecordFramesList[client].Length, CurrentRewindFrame[client]);
+                
+                ChangeClientTeam(client, Player_GetPreferredTeam(client));
+                SetEntityMoveType(client, MOVETYPE_NONE);
+                
+                RemoveBotFromPlayer(client);
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case ALL_RewindSpeed:
+            {
+                //PrintToChat(client, "%s", ALL_RewindSpeed);
+                
+                int curspeed = Player_GetRewindSpeed(client);
+                
+                curspeed *= 2;
+                
+                if (curspeed > 32)
+                {
+                    curspeed = 1;
+                }
+                
+                Player_SetRewindSpeed(client, curspeed);
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case ALL_JumpToStart:
+            {
+                //PrintToChat(client, "%s", ALL_JumpToStart);
+            
+                Player_SetRewindFrame(client, 0);
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+            
+            case ALL_JumpToEnd:
+            {
+                //PrintToChat(client, "%s", ALL_JumpToEnd);
+                
+                Player_SetRewindFrame(client, Player_GetRecordedFramesCount(client) - 1);
+                
+                STA_OpenSegmentReplayMenu(client);
+            }
+        }
+    }
+    
+    else if (action == MenuAction_Cancel)
+    {
+        ResetPlayerReplaySegment(client);
+    }
+    
+    else if (action == MenuAction_End)
+    {        
+        delete menu;
+    }
+    
+    return 0;
 }
 
 public bool IsPlayingOnTeam(int client)
@@ -839,35 +842,36 @@ public Action STA_FastForwardUp(int client, int args)
 
 public Action SetPlayerMoveTypeNone(Handle timer, any client)
 {
-	SetEntityMoveType(client, MOVETYPE_NONE);
+    SetEntityMoveType(client, MOVETYPE_NONE);
+    return Plugin_Continue; // Assuming no need to stop other plugins from processing this callback
 }
 
 public Action OnPlayerSpawn(Event event, const char[] name, bool dontbroadcast)
 {
-	int userid = GetEventInt(event, "userid");
-	int client = GetClientOfUserId(userid);
-	
-	/*
-		Disables player collision
-	*/
-	SetEntData(client, Offset_CollisionGroup, COLLISION_GROUP_DEBRIS_TRIGGER, 4, true);
-	
-	/*
-		A little delay is needed before a players movetype can be changed
-		NONE is used to remove the jittering when rewinding, it probably removes the client prediction
-	*/
-	if (Player_GetIsRewinding(client))
-	{
-		CreateTimer(0.1, SetPlayerMoveTypeNone, client);
-	}
+    int userid = GetEventInt(event, "userid");
+    int client = GetClientOfUserId(userid);
+    
+    // Disables player collision
+    SetEntData(client, Offset_CollisionGroup, COLLISION_GROUP_DEBRIS_TRIGGER, 4, true);
+    
+    // A little delay is needed before a player's movetype can be changed
+    // NONE is used to remove the jittering when rewinding, it probably removes the client prediction
+    if (Player_GetIsRewinding(client))
+    {
+        CreateTimer(0.1, SetPlayerMoveTypeNone, client);
+    }
+    
+    return Plugin_Continue; // Continue allowing other plugins to handle this event as well
 }
 
 public Action OnPlayerDisconnect(Event event, const char[] name, bool dontbroadcast)
 {
-	int userid = GetEventInt(event, "userid");
-	int client = GetClientOfUserId(userid);
-	
-	ResetPlayerReplaySegment(client);
+    int userid = GetEventInt(event, "userid");
+    int client = GetClientOfUserId(userid);
+    
+    ResetPlayerReplaySegment(client);
+
+    return Plugin_Continue; // Continue allowing other plugins to handle this event as well
 }
 
 public void OnEntityCreated(int entity, const char[] classname)
@@ -942,27 +946,29 @@ public void OnPluginStart()
 
 public Action GetBotIDs(Handle timer)
 {
-	int index = 0;
-	
-	for (int i = 1; i < MaxClients; i++)
-	{
-		if (IsClientInGame(i) && IsFakeClient(i) && !IsClientSourceTV(i))
-		{
-			//PrintToServer("%d at index %d", i, index);
-			
-			ChangeClientTeam(i, CS_TEAM_SPECTATOR);
-			
-			CS_SetClientClanTag(i, "[STA]");
-			
-			char namebuf[MAX_NAME_LENGTH];			
-			FormatEx(namebuf, sizeof(namebuf), "crashfort/SourceToolAssist");
-			
-			SetClientName(i, namebuf);
-			
-			BotIDs[index] = i;			
-			++index;
-		}
-	}
+    int index = 0;
+    
+    for (int i = 1; i <= MaxClients; i++) // Ensuring loop checks up to MaxClients inclusively
+    {
+        if (IsClientInGame(i) && IsFakeClient(i) && !IsClientSourceTV(i))
+        {
+            //PrintToServer("%d at index %d", i, index);
+            
+            ChangeClientTeam(i, CS_TEAM_SPECTATOR);
+            
+            CS_SetClientClanTag(i, "[STA]");
+            
+            char namebuf[MAX_NAME_LENGTH];            
+            FormatEx(namebuf, sizeof(namebuf), "crashfort/SourceToolAssist");
+            
+            SetClientName(i, namebuf);
+            
+            BotIDs[index] = i;            
+            ++index;
+        }
+    }
+    
+    return Plugin_Continue; // Suggested return value assuming you want other hooks to continue processing
 }
 
 public void OnMapStart()
@@ -986,7 +992,6 @@ public void OnMapStart()
 	
 	CreateTimer(1.0, GetBotIDs);
 	//GetBotIDs();
-	
 	CP_MapStartInit();
 }
 
