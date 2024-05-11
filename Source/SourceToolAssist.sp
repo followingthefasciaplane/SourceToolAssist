@@ -987,8 +987,8 @@ public void OnMapStart()
 
 	ServerCommand("sv_force_transmit_ents 1"); //fixes replay bug
 
-	//ServerCommand("sv_maxusrcmdprocessticks 0")
-	//ServerCommand("sv_max_usercmd_future_ticks 0")
+	//ServerCommand("sv_maxusrcmdprocessticks 0"); //unpatches speedhacks. allows client to send less frames than tickrate
+	//ServerCommand("sv_max_usercmd_future_ticks 0"); //old school host_timescale, but timescale invalidates your run regardless
 
 	
 	/*
