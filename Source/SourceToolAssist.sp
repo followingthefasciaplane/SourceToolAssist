@@ -984,6 +984,12 @@ public void OnMapStart()
 	ServerCommand("mp_autoteambalance 0");
 	ServerCommand("bot_join_after_player 0");
 	ServerCommand("mp_limitteams 0");
+
+	ServerCommand("sv_force_transmit_ents 1"); //fixes replay bug
+
+	//ServerCommand("sv_maxusrcmdprocessticks 0")
+	//ServerCommand("sv_max_usercmd_future_ticks 0")
+
 	
 	/*
 		Don't let the bot commands be overwritten
