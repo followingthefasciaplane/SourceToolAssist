@@ -40,7 +40,7 @@ int BotIDs[BOT_Count];
 
 public void ResetPlayerReplaySegment(int client)
 {
-    if (!IsClientInGame(client))
+    if (client <= 0 || !IsClientInGame(client))
     {
         return;
     }
