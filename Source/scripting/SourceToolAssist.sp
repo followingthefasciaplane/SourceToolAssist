@@ -13,29 +13,29 @@
 */
 #include <multicolors>
 
-#include "STA\Time.inc"
-#include "STA\Boundingbox.inc"
-#include "STA\CollisionGroups.inc"
-#include "STA\Menus.inc"
-#include "STA\Permissions.inc"
-#include "STA\Offsets.inc"
-#include "STA\Formats.inc"
-#include "STA\Vector.inc"
+#include "STA/Time.inc"
+#include "STA/Boundingbox.inc"
+#include "STA/CollisionGroups.inc"
+#include "STA/Menus.inc"
+#include "STA/Permissions.inc"
+#include "STA/Offsets.inc"
+#include "STA/Formats.inc"
+#include "STA/Vector.inc"
 
-#include "STA\STAPlayer.inc"
-#include "STA\Checkpoints.inc"
-#include "STA\ReplayFrame.inc"
+#include "STA/STAPlayer.inc"
+#include "STA/Checkpoints.inc"
+#include "STA/ReplayFrame.inc"
 
 public Plugin myinfo = 
 {
     name = "Source Tool Assist",
     author = "crashfort",
     description = "",
-    version = "4",
+    version = "5",
     url = "https://google.se"
 };
 
-#define BOT_Count 1
+#define BOT_Count 5
 int BotIDs[BOT_Count];
 
 public void ResetPlayerReplaySegment(int client)
@@ -74,20 +74,30 @@ public void ResetPlayerReplaySegment(int client)
 */
 public int GetFreeBotID()
 {
-    return 0;
+    for (int i = 0; i < BOT_Count; i++)
+    {
+        if (BotIDs[i] != 0 && !Player_IsBotInUse(BotIDs[i]))
+        {
+            return i;
+        }
+    }
+    return -1;
 }
+
 
 public void CreateBotForPlayer(int client)
 {
-    int index = BotIDs[GetFreeBotID()];
-    
-    if (index == 0)
+    int botIndex = GetFreeBotID();
+    if (botIndex == -1)
     {
+        STA_PrintMessageToClient(client, "No free bots available.");
         return;
     }
-    
-    Player_SetLinkedBotIndex(client, index);
-    Bot_SetLinkedPlayerIndex(index, client);
+
+    int botId = BotIDs[botIndex];
+    Player_SetLinkedBotIndex(client, botId);
+    Bot_SetLinkedPlayerIndex(botId, client);
+    Player_SetBotInUse(botId, true);
     
     bool onteam = IsPlayingOnTeam(client);
     
@@ -96,24 +106,24 @@ public void CreateBotForPlayer(int client)
     */
     if (onteam)
     {
-        ChangeClientTeam(index, GetClientTeam(client));    
+        ChangeClientTeam(botId, GetClientTeam(client));    
     }
     
     else
     {
-        ChangeClientTeam(index, CS_TEAM_T);
+        ChangeClientTeam(botId, CS_TEAM_T);
     }
     
-    CS_RespawnPlayer(index);
+    CS_RespawnPlayer(botId);
     
-    SetEntityRenderMode(index, RENDER_TRANSADD);
-    SetEntityRenderColor(index, 255, 255, 255, 100);
+    SetEntityRenderMode(botId, RENDER_TRANSADD);
+    SetEntityRenderColor(botId, 255, 255, 255, 100);
     
     /*
         Having a bot in noclip and zero gravity ensures it's smooth
     */
-    SetEntityMoveType(index, MOVETYPE_NOCLIP);
-    SetEntityGravity(index, 0.0);
+    SetEntityMoveType(botId, MOVETYPE_NOCLIP);
+    SetEntityGravity(botId, 0.0);
 }
 
 public void RemoveBotFromPlayer(int client)
@@ -941,7 +951,22 @@ public void OnPluginStart()
 	Offsets_Init();
 	CP_Init();
 	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		g_BotInUse[i] = false;
+	}
+	
 	VariableTeleportDistance = CreateConVar("sm_sta_teledist", "9216", "3D vector length that decides what a teleport is");
+}
+
+public void OnClientPutInServer(int client)
+{
+    Player_InitializeData(client);
+}
+
+public void OnClientDisconnect(int client)
+{
+    Player_CleanupData(client);
 }
 
 public Action GetBotIDs(Handle timer)
@@ -1093,189 +1118,122 @@ public void HandleReplayRewind(int client)
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float wishvel[3], float wishangles[3])
 {
-	Action ret = Plugin_Continue;
-	
-	if (!IsFakeClient(client) && Player_GetIsCreatingCheckpoint(client))
-	{
-		CP_Update(client);
-		return ret;
-	}
-	
-	bool isfake = false;
-	int fakeid = 0;
-	
-	if (IsFakeClient(client))
-	{
-		isfake = true;
-		fakeid = client;
-		
-		client = Bot_GetLinkedPlayerIndex(client);
-	}
-	
-	//PrintToServer("%d", isfake);
-	
-	if (Player_GetIsSegmenting(client) && !isfake)
-	{
-		if (Player_GetIsRewinding(client))
-		{
-			HandleReplayRewind(client);
-			SetPlayerReplayFrame(client, client, Player_GetRewindFrame(client));
-			ret = Plugin_Handled;
-		}
-		
-		/*
-			Recording
-		*/
-		else
-		{
-			float pos[3];
-			GetClientAbsOrigin(client, pos);
-			
-			float viewangles[3];
-			GetClientEyeAngles(client, viewangles);
-			
-			float frameangles[2];
-			CopyVector3ToVector2(viewangles, frameangles);
-			
-			/*
-				zzz
-			*/			
-			float velocity[3];
-			GetEntPropVector(client, Prop_Data, "m_vecAbsVelocity", velocity);
-			
-			any frameinfo[FRAME_Length];
-			
-			frameinfo[FRAME_Buttons] = buttons;
-
-			CopyVector3ToArray(pos, frameinfo, FRAME_PosX);
-			CopyVector2ToArray(frameangles, frameinfo, FRAME_AngX);
-			CopyVector3ToArray(velocity, frameinfo, FRAME_VelX);
-			
-			Player_PushFrame(client, frameinfo);
-			
-			Player_SetRewindFrame(client, Player_GetRecordedFramesCount(client) - 1);
-			
-			//PrintToServer("Client: %d Frame: %d", client, RecordFramesList[client].Length);
-			
-			ret = Plugin_Changed;
-		}
-	}
-	
-	/*
-		Rewinding while recording
-	*/
-	else if (Player_GetIsPlayingReplay(client) && Player_GetIsRewinding(client) && !isfake)
-	{
-		HandleReplayRewind(client);
-		SetPlayerReplayFrame(client, client, Player_GetRewindFrame(client));
-		
-		ret = Plugin_Handled;
-	}
-	
-	/*
-		Playing
-	*/
-	else
-	{		
-		if (Player_GetIsPlayingReplay(client) && isfake)
-		{
-			int curframe = Player_GetRewindFrame(client);
-			
-			any frameinfo[FRAME_Length];
-			Player_GetFrame(client, curframe, frameinfo);
-			
-			float pos[3];
-			float frameangles[2];
-			float velocity[3];
-			
-			GetArrayVector3(frameinfo, FRAME_PosX, pos);
-			GetArrayVector2(frameinfo, FRAME_AngX, frameangles);			
-			GetArrayVector3(frameinfo, FRAME_VelX, velocity);
-			
-			float viewangles[3];
-			CopyVector2ToVector3(frameangles, viewangles);
-			
-			bool normalproc = true;
-			
-			/*
-				Paused while watching a replay, this will allow the player
-				to edit a bot while it's playing
-			*/
-			if (Player_GetIsRewinding(client))
-			{
-				normalproc = false;
-				
-				HandleReplayRewind(client);
-				
-				TeleportEntity(fakeid, pos, viewangles, velocity);
-			}
-			
-			{
-				/*
-					Parameter overrides to ensure a smooth playback
-				*/
-				wishvel[0] = 0.0;
-				wishvel[1] = 0.0;
-				wishvel[2] = 0.0;
-				
-				wishangles[0] = frameangles[0];
-				wishangles[1] = frameangles[1];
-				
-				buttons = frameinfo[FRAME_Buttons];
-				
-				if (curframe == 0)
-				{
-					TeleportEntity(fakeid, pos, viewangles, velocity);
-				}
-				
-				else
-				{				
-					float curpos[3];
-					GetClientAbsOrigin(fakeid, curpos);
-					
-					float distance = GetVectorDistance(pos, curpos, true);
-					
-					if (distance > VariableTeleportDistance.FloatValue)
-					{
-						//PrintToChat(client, "%0.2f, %0.2f", distance, BotCorrectDistance);
-						
-						TeleportEntity(fakeid, pos, viewangles, NULL_VECTOR);
-					}
-					
-					/*
-						Normal processing with just adjusting velocity between the recorded points
-					*/
-					else
-					{
-						float newvel[3];
-						MakeVectorFromPoints(curpos, pos, newvel);
-						ScaleVector(newvel, 1.0 / GetTickInterval());
-						
-						TeleportEntity(fakeid, NULL_VECTOR, viewangles, newvel);
-					}
-				}
-				
-				ret = Plugin_Changed;
-			}
-			
-			/*
-				When editing a bot it should not increment the current frame
-			*/
-			if (normalproc)
-			{
-				Player_IncrementRewindFrame(client);
-				curframe = Player_GetRewindFrame(client);
-				
-				int length = Player_GetRecordedFramesCount(client);
-				
-				if (curframe >= length)
-				{
-					Player_SetRewindFrame(client, 0);
-				}
-			}
-		}
-	}
-	
-	//PrintToServer("Client: %d Buttons: %d Angles: %0.2f %0.2f", client, buttons, angles[0], angles[1]);
-	return ret;
+    Action ret = Plugin_Continue;
+    
+    if (!IsFakeClient(client) && Player_GetIsCreatingCheckpoint(client))
+    {
+        CP_Update(client);
+        return ret;
+    }
+    
+    bool isfake = IsFakeClient(client);
+    int fakeid = isfake ? client : 0;
+    int realClient = isfake ? Bot_GetLinkedPlayerIndex(client) : client;
+    
+    if (realClient == 0) // Bot not linked to a player
+    {
+        return ret;
+    }
+    
+    if (Player_GetIsSegmenting(realClient) && !isfake)
+    {
+        if (Player_GetIsRewinding(realClient))
+        {
+            HandleReplayRewind(realClient);
+            SetPlayerReplayFrame(realClient, realClient, Player_GetRewindFrame(realClient));
+            ret = Plugin_Handled;
+        }
+        else // Recording
+        {
+            float pos[3], viewangles[3], frameangles[2], velocity[3];
+            GetClientAbsOrigin(realClient, pos);
+            GetClientEyeAngles(realClient, viewangles);
+            CopyVector3ToVector2(viewangles, frameangles);
+            GetEntPropVector(realClient, Prop_Data, "m_vecAbsVelocity", velocity);
+            
+            any frameinfo[FRAME_Length];
+            frameinfo[FRAME_Buttons] = buttons;
+            CopyVector3ToArray(pos, frameinfo, FRAME_PosX);
+            CopyVector2ToArray(frameangles, frameinfo, FRAME_AngX);
+            CopyVector3ToArray(velocity, frameinfo, FRAME_VelX);
+            
+            Player_PushFrame(realClient, frameinfo);
+            Player_SetRewindFrame(realClient, Player_GetRecordedFramesCount(realClient) - 1);
+            
+            ret = Plugin_Changed;
+        }
+    }
+    else if (Player_GetIsPlayingReplay(realClient) && Player_GetIsRewinding(realClient) && !isfake)
+    {
+        HandleReplayRewind(realClient);
+        SetPlayerReplayFrame(realClient, realClient, Player_GetRewindFrame(realClient));
+        ret = Plugin_Handled;
+    }
+    else if (Player_GetIsPlayingReplay(realClient) && isfake)
+    {
+        int curframe = Player_GetRewindFrame(realClient);
+        any frameinfo[FRAME_Length];
+        Player_GetFrame(realClient, curframe, frameinfo);
+        
+        float pos[3], frameangles[2], velocity[3], viewangles[3];
+        GetArrayVector3(frameinfo, FRAME_PosX, pos);
+        GetArrayVector2(frameinfo, FRAME_AngX, frameangles);
+        GetArrayVector3(frameinfo, FRAME_VelX, velocity);
+        CopyVector2ToVector3(frameangles, viewangles);
+        
+        bool normalproc = true;
+        
+        if (Player_GetIsRewinding(realClient))
+        {
+            normalproc = false;
+            HandleReplayRewind(realClient);
+            TeleportEntity(fakeid, pos, viewangles, velocity);
+        }
+        
+        wishvel[0] = 0.0;
+        wishvel[1] = 0.0;
+        wishvel[2] = 0.0;
+        wishangles[0] = frameangles[0];
+        wishangles[1] = frameangles[1];
+        buttons = frameinfo[FRAME_Buttons];
+        
+        if (curframe == 0)
+        {
+            TeleportEntity(fakeid, pos, viewangles, velocity);
+        }
+        else
+        {
+            float curpos[3];
+            GetClientAbsOrigin(fakeid, curpos);
+            float distance = GetVectorDistance(pos, curpos, true);
+            
+            if (distance > VariableTeleportDistance.FloatValue)
+            {
+                TeleportEntity(fakeid, pos, viewangles, NULL_VECTOR);
+            }
+            else
+            {
+                float newvel[3];
+                MakeVectorFromPoints(curpos, pos, newvel);
+                ScaleVector(newvel, 1.0 / GetTickInterval());
+                TeleportEntity(fakeid, NULL_VECTOR, viewangles, newvel);
+            }
+        }
+        
+        ret = Plugin_Changed;
+        
+        if (normalproc)
+        {
+            Player_IncrementRewindFrame(realClient);
+            curframe = Player_GetRewindFrame(realClient);
+            int length = Player_GetRecordedFramesCount(realClient);
+            
+            if (curframe >= length)
+            {
+                Player_SetRewindFrame(realClient, 0);
+            }
+        }
+    }
+    
+    return ret;
 }

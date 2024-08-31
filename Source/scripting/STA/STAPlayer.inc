@@ -626,3 +626,91 @@ public void STA_PrintMessageToClientSpectators(int client, const char[] format, 
 		CPrintToChat(specs[i], message);
 	}
 }
+
+// Multiplayer
+
+bool g_BotInUse[MAXPLAYERS + 1];
+
+public bool Player_IsBotInUse(int botId)
+{
+    if (botId < 1 || botId > MaxClients)
+    {
+        return false;
+    }
+    return g_BotInUse[botId];
+}
+
+public void Player_SetBotInUse(int botId, bool inUse)
+{
+    if (botId < 1 || botId > MaxClients)
+    {
+        return;
+    }
+    g_BotInUse[botId] = inUse;
+}
+
+public void Player_InitializeData(int client)
+{
+    PreferredTeam[client] = 0;
+    IsSegmenting[client] = false;
+    LastPausedTick[client] = 0;
+    IsRewinding[client] = false;
+    HasRun[client] = false;
+    IsPlayingReplay[client] = false;
+    RewindSpeed[client] = 1;
+    if (RecordFramesList[client] != null)
+    {
+        delete RecordFramesList[client];
+    }
+    RecordFramesList[client] = new ArrayList(FRAME_Length);
+    CurrentRewindFrame[client] = 0;
+    PlayerLinkedBotIndex[client] = 0;
+    ZoneGridSize[client] = 8;
+    IsCreatingCheckpoint[client] = false;
+    ZoneEditingStage[client] = 0;
+    ZeroVector3(ZoneEditStartPos[client]);
+    ZeroVector3(ZoneEditEndPos[client]);
+    ZoneEditCreationType[client] = 0;
+    IsTimingRun[client] = false;
+    StartTimeReplayTick[client] = 0;
+    HasFastForwardKeyDown[client] = false;
+    HasRewindKeyDown[client] = false;
+}
+
+public void Player_CleanupData(int client)
+{
+    if (RecordFramesList[client] != null)
+    {
+        delete RecordFramesList[client];
+        RecordFramesList[client] = null;
+    }
+    
+    int botId = PlayerLinkedBotIndex[client];
+    if (botId != 0)
+    {
+        Player_SetBotInUse(botId, false);
+        Bot_SetLinkedPlayerIndex(botId, 0);
+    }
+    
+    PlayerLinkedBotIndex[client] = 0;
+    IsSegmenting[client] = false;
+    IsRewinding[client] = false;
+    HasRun[client] = false;
+    IsPlayingReplay[client] = false;
+    IsCreatingCheckpoint[client] = false;
+    IsTimingRun[client] = false;
+    
+    // Reset other data to default values
+    PreferredTeam[client] = 0;
+    LastPausedTick[client] = 0;
+    RewindSpeed[client] = 1;
+    CurrentRewindFrame[client] = 0;
+    ZoneGridSize[client] = 8;
+    ZoneEditingStage[client] = 0;
+    ZeroVector3(ZoneEditStartPos[client]);
+    ZeroVector3(ZoneEditEndPos[client]);
+    ZoneEditCreationType[client] = 0;
+    StartTimeReplayTick[client] = 0;
+    HasFastForwardKeyDown[client] = false;
+    HasRewindKeyDown[client] = false;
+}

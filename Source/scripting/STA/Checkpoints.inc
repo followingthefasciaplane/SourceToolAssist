@@ -86,7 +86,7 @@ public void CP_GetZoneColor(int zonetype, int outcolor[4])
     }
 }
 
-ArrayList STA_Checkpoints = null;
+ArrayList STA_Checkpoints[MAXPLAYERS + 1];
 int STA_LaserSprite;
 
 public bool CP_ZoneEditTraceFilter(int entity, int contentsmask, any data)
@@ -148,7 +148,7 @@ public int MenuHandler_Checkpoints(Menu menu, MenuAction action, int param1, int
             
             case CPMenu_RemoveZones:
             {
-                CP_RemoveAllCheckpoints();
+                CP_RemoveAllCheckpoints(client);
                 STA_OpenZoneMenu(client);
             }
             
@@ -206,11 +206,11 @@ public int MenuHandler_Checkpoints(Menu menu, MenuAction action, int param1, int
                         CopyVector3ToArray(min, cpinfo, CPZone_MinX);
                         CopyVector3ToArray(max, cpinfo, CPZone_MaxX);
                         
-                        int zoneid = GetArraySize(STA_Checkpoints);
+                        int zoneid = GetArraySize(STA_Checkpoints[client]);
                         
-                        PushArrayArray(STA_Checkpoints, cpinfo);
+                        PushArrayArray(STA_Checkpoints[client], cpinfo);
                         
-                        CP_CreateTriggerForCheckpoint(zoneid);
+                        CP_CreateTriggerForCheckpoint(client, zoneid);
                         
                         CP_ResetPlayer(client);
                     }
@@ -257,7 +257,7 @@ public void STA_OpenZoneMenu(int client)
         
         Menu_AddEnumEntry(menu, CPMenu_LoadFromFile, "Load checkpoints (override)");
         
-        if (GetArraySize(STA_Checkpoints) > 0)
+        if (GetArraySize(STA_Checkpoints[client]) > 0)
         {
             Menu_AddEnumEntry(menu, CPMenu_SaveToFile, "Save checkpoints");
             Menu_AddEnumEntry(menu, CPMenu_RemoveZones, "Remove checkpoints");
@@ -313,18 +313,18 @@ public Action STA_ZoneGridSize(int client, int args)
     return Plugin_Handled;
 }
 
-public void CP_RemoveAllCheckpoints()
+public void CP_RemoveAllCheckpoints(int client)
 {
-    if (STA_Checkpoints == null)
+    if (STA_Checkpoints[client] == null)
     {
         return;
     }
     
-    int arraysize = GetArraySize(STA_Checkpoints);
+    int arraysize = GetArraySize(STA_Checkpoints[client]);
     
     for (int i = 0; i < arraysize; ++i)
     {
-        int entid = GetArrayCell(STA_Checkpoints, i, CPZone_EntID);
+        int entid = GetArrayCell(STA_Checkpoints[client], i, CPZone_EntID);
         
         if (entid == -1)
         {
@@ -334,7 +334,7 @@ public void CP_RemoveAllCheckpoints()
         RemoveEdict(entid);
     }
     
-    ClearArray(STA_Checkpoints);
+    ClearArray(STA_Checkpoints[client]);
 }
 
 /*
@@ -364,15 +364,26 @@ public void CP_MapStartInit()
     
     CreateTimer(1.0, RenewZoneBoxes, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     
-    CP_RemoveAllCheckpoints();
-    
-    STA_Checkpoints = CreateArray(CPZone_ArrayLength);
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (IsClientInGame(i))
+        {
+            CP_RemoveAllCheckpoints(i);
+            STA_Checkpoints[i] = CreateArray(CPZone_ArrayLength);
+        }
+    }
 }
 
 public void CP_OnMapEnd()
 {
-    CP_RemoveAllCheckpoints();
-    delete STA_Checkpoints;
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (STA_Checkpoints[i] != null)
+        {
+            CP_RemoveAllCheckpoints(i);
+            delete STA_Checkpoints[i];
+        }
+    }
 }
 
 public void CP_Init()
@@ -397,32 +408,38 @@ public void CP_UpdateZoneEditBox(int client)
     STA_DisplayBox(client, STA_LaserSprite, points, 0.1, color);
 }
 
-public Action RenewZoneBoxes(Handle timer, any client)
+public Action RenewZoneBoxes(Handle timer, any data)
 {
-    int arraysize = GetArraySize(STA_Checkpoints);
-    
-    for (int i = 0; i < arraysize; ++i)
+    for (int client = 1; client <= MaxClients; client++)
     {
-        int zonetype;
-        float min[3];
-        float max[3];
-        
-        float points[8][3];
-        
-        any cpinfo[CPZone_ArrayLength];
-        GetArrayArray(STA_Checkpoints, i, cpinfo);
-        
-        zonetype = cpinfo[CPZone_ZoneType];
+        if (!IsClientInGame(client) || STA_Checkpoints[client] == null)
+            continue;
 
-        GetArrayVector3(cpinfo, CPZone_MinX, min);
-        GetArrayVector3(cpinfo, CPZone_MaxX, max);
+        int arraysize = GetArraySize(STA_Checkpoints[client]);
         
-        STA_PointsFromBox(min, max, points);
-        
-        int color[4];
-        CP_GetZoneColor(zonetype, color);
-        
-        STA_DisplayBoxAll(STA_LaserSprite, points, 1.0, color);
+        for (int i = 0; i < arraysize; ++i)
+        {
+            int zonetype;
+            float min[3];
+            float max[3];
+            
+            float points[8][3];
+            
+            any cpinfo[CPZone_ArrayLength];
+            GetArrayArray(STA_Checkpoints[client], i, cpinfo);
+            
+            zonetype = cpinfo[CPZone_ZoneType];
+
+            GetArrayVector3(cpinfo, CPZone_MinX, min);
+            GetArrayVector3(cpinfo, CPZone_MaxX, max);
+            
+            STA_PointsFromBox(min, max, points);
+            
+            int color[4];
+            CP_GetZoneColor(zonetype, color);
+            
+            STA_DisplayBox(client, STA_LaserSprite, points, 1.0, color);
+        }
     }
     
     return Plugin_Continue;
@@ -498,7 +515,7 @@ public int MenuHandler_ZoneSelect(Menu menu, MenuAction action, int param1, int 
         
         CP_ResetPlayer(client);
         
-        CP_RemoveAllCheckpoints();
+        CP_RemoveAllCheckpoints(client);
         
         int arraysize;
         ReadFileCell(file, arraysize, 4);
@@ -513,14 +530,14 @@ public int MenuHandler_ZoneSelect(Menu menu, MenuAction action, int param1, int 
                 ReadFileCell(file, cpinfo[j], 4);
             }
             
-            PushArrayArray(STA_Checkpoints, cpinfo);
+            PushArrayArray(STA_Checkpoints[client], cpinfo);
         }
         
         delete file;
         
         for (int i = 0; i < arraysize; ++i)
         {
-            CP_CreateTriggerForCheckpoint(i);
+            CP_CreateTriggerForCheckpoint(client, i);
         }
         
         STA_PrintMessageToClient(client, "Loaded zones \"%s\"", info);
@@ -531,16 +548,16 @@ public int MenuHandler_ZoneSelect(Menu menu, MenuAction action, int param1, int 
     
     else if (action == MenuAction_Cancel)
     {
-        return 0; // Optionally return a specific value for cancel action.
+        return 0;
     }
     
     else if (action == MenuAction_End)
     {        
         delete menu;
-        return 0; // Return 0 or another appropriate value indicating the end of menu interaction.
+        return 0;
     }
 
-    return 0; // Ensure there is a return statement by default to prevent compilation warnings.
+    return 0;
 }
 
 public void CP_LoadZonesFromFile(int client)
@@ -625,14 +642,14 @@ public void CP_SaveZonesToFile(int client)
         return;
     }
     
-    int arraysize = GetArraySize(STA_Checkpoints);
+    int arraysize = GetArraySize(STA_Checkpoints[client]);
     WriteFileCell(file, arraysize, 4);
     
     any cpinfo[CPZone_ArrayLength];
     
     for (int i = 0; i < arraysize; ++i)
     {
-        GetArrayArray(STA_Checkpoints, i, cpinfo);
+        GetArrayArray(STA_Checkpoints[client], i, cpinfo, sizeof(cpinfo));
         
         for (int j = CPZone_ZoneType; j < CPZone_ArrayLength; ++j)
         {
@@ -668,31 +685,31 @@ public bool CP_CanPassHookSayTest(int client)
     return true;
 }
 
-public void CP_StartTouch(int entity, int client)
+public void CP_StartTouch(int entity, int touchingClient)
 {
-    if (!CP_CanPassHookTest(client))
+    if (!CP_CanPassHookTest(touchingClient))
     {
         return;
     }
     
     bool isfake = false;
     int fakeid = 0;
+    int realClient = touchingClient;
     
-    if (IsFakeClient(client))
+    if (IsFakeClient(touchingClient))
     {
         isfake = true;
-        fakeid = client;
-        
-        client = Bot_GetLinkedPlayerIndex(client);
+        fakeid = touchingClient;
+        realClient = Bot_GetLinkedPlayerIndex(touchingClient);
     }
     
     int zonetype;
     int zoneid;
-    int unused2;
-    int unused3;
-    Offsets_GetEntityRenderColor(entity, zonetype, zoneid, unused2, unused3);
+    int clientid;
+    int unused;
+    Offsets_GetEntityRenderColor(entity, zonetype, zoneid, clientid, unused);
     
-    bool timing = Player_GetIsTimingRun(client);
+    bool timing = Player_GetIsTimingRun(realClient);
     
     if (timing)
     {
@@ -700,38 +717,8 @@ public void CP_StartTouch(int entity, int client)
         {
             char message[256];
             
-            /*
-            float xyvel;
-            float zvel;
-            
-            if (isfake)
-            {
-                ClientVelocityLength(fakeid, xyvel, zvel);
-            }
-            
-            else
-            {
-                ClientVelocityLength(client, xyvel, zvel);
-            }
-            
-            FormatEx(message, sizeof(message), STA_ZoneSpeedEnterFormat, xyvel, zvel);
-            
-            if (isfake)
-            {
-                char fakenamebuf[MAX_NAME_LENGTH];
-                GetClientName(fakeid, fakenamebuf, sizeof(fakenamebuf));
-                
-                CPrintToChat(client, "%s{lightblue}* %s * %s", STA_MessagePrefix, fakenamebuf, message);
-            }
-            
-            else
-            {
-                CPrintToChat(client, "%s%s", STA_MessagePrefix, message);
-            }
-            */
-            
             float tickinterval = GetTickInterval();
-            int curframe = Player_GetRewindFrame(client) - Player_GetStartTimeReplayTick(client);
+            int curframe = Player_GetRewindFrame(realClient) - Player_GetStartTimeReplayTick(realClient);
             
             float curtime = curframe * tickinterval;
             
@@ -744,7 +731,6 @@ public void CP_StartTouch(int entity, int client)
                 {
                     FormatEx(message, sizeof(message), STA_CheckpointFormat, zoneid, curtimebuf);
                 }
-
                 else
                 {
                     FormatEx(message, sizeof(message), STA_CSGOCheckpointFormat, zoneid, curtimebuf);
@@ -754,23 +740,20 @@ public void CP_StartTouch(int entity, int client)
                 {
                     STA_PrintMessageToClientSpectators(fakeid, message);
                 }
-                
                 else
                 {
-                    STA_PrintMessageToClient(client, message);
+                    STA_PrintMessageToClient(realClient, message);
                 }
             }
-            
             else
             {
                 char namebuf[MAX_NAME_LENGTH];                
-                GetClientName(fakeid, namebuf, sizeof(namebuf));
+                GetClientName(isfake ? fakeid : realClient, namebuf, sizeof(namebuf));
                 
                 if (IsSource2009())
                 {
                     FormatEx(message, sizeof(message), STA_EndFinishFormat, namebuf, curtimebuf);
                 }
-
                 else
                 {
                     FormatEx(message, sizeof(message), STA_CSGOEndFinishFormat, namebuf, curtimebuf);
@@ -778,88 +761,49 @@ public void CP_StartTouch(int entity, int client)
                 
                 STA_PrintMessageToAllClients(message);
                 
-                Player_SetIsTimingRun(client, false);
+                Player_SetIsTimingRun(realClient, false);
             }
         }
-        
         else if (zonetype == CP_ZoneTypeStart)
         {
-            Player_SetIsTimingRun(client, false);
+            Player_SetIsTimingRun(realClient, false);
         }
     }
-    
-    //PrintToServer("enter to type %d", zonetype);
 }
 
-public void CP_EndTouch(int entity, int client)
+public void CP_EndTouch(int entity, int touchingClient)
 {
-    if (!CP_CanPassHookTest(client))
+    if (!CP_CanPassHookTest(touchingClient))
     {
         return;
     }
     
-    /*bool isfake = false;
-    int fakeid = 0;*/
+    int realClient = touchingClient;
     
-    if (IsFakeClient(client))
+    if (IsFakeClient(touchingClient))
     {
-        /*isfake = true;
-        fakeid = client;*/
-        
-        client = Bot_GetLinkedPlayerIndex(client);
+        realClient = Bot_GetLinkedPlayerIndex(touchingClient);
     }
     
     int zonetype;
     int zoneid;
-    int unused2;
-    int unused3;
-    Offsets_GetEntityRenderColor(entity, zonetype, zoneid, unused2, unused3);
+    int clientid;
+    int unused;
+    Offsets_GetEntityRenderColor(entity, zonetype, zoneid, clientid, unused);
     
-    bool timing = Player_GetIsTimingRun(client);
+    bool timing = Player_GetIsTimingRun(realClient);
     
     if (zonetype == CP_ZoneTypeStart)
     {
         if (!timing)
         {
-            Player_SetStartTimeReplayTick(client, Player_GetRewindFrame(client));
-            Player_SetIsTimingRun(client, true);
+            Player_SetStartTimeReplayTick(realClient, Player_GetRewindFrame(realClient));
+            Player_SetIsTimingRun(realClient, true);
         }
     }
-    
-    /*
-    float xyvel;
-    float zvel;
-    
-    if (isfake)
-    {
-        ClientVelocityLength(fakeid, xyvel, zvel);
-    }
-    
-    else
-    {
-        ClientVelocityLength(client, xyvel, zvel);
-    }
-    
-    char message[256];
-    FormatEx(message, sizeof(message), STA_ZoneSpeedLeaveFormat, xyvel, zvel);
-    
-    if (isfake)
-    {
-        char fakenamebuf[MAX_NAME_LENGTH];
-        GetClientName(fakeid, fakenamebuf, sizeof(fakenamebuf));
-        
-        CPrintToChat(client, "%s{lightblue}* %s * %s", STA_MessagePrefix, fakenamebuf, message);
-    }
-    
-    else
-    {
-        CPrintToChat(client, "%s%s", STA_MessagePrefix, message);
-    }
-    */
-    //PrintToServer("leave from type %d", zonetype);
 }
 
-public void CP_CreateTriggerForCheckpoint(int checkpoint)
+public void CP_CreateTriggerForCheckpoint(int client, int checkpoint)
 {
     int newent = CreateEntityByName("trigger_multiple");
     
@@ -869,13 +813,12 @@ public void CP_CreateTriggerForCheckpoint(int checkpoint)
     }
     
     any cpinfo[CPZone_ArrayLength];
-    GetArrayArray(STA_Checkpoints, checkpoint, cpinfo);
+    GetArrayArray(STA_Checkpoints[client], checkpoint, cpinfo);
     
-    SetArrayCell(STA_Checkpoints, checkpoint, newent, CPZone_EntID);
+    SetArrayCell(STA_Checkpoints[client], checkpoint, newent, CPZone_EntID);
     
     float min[3];
     float max[3];    
-    //Player_GetZoneEditBoxMinMax(client, min, max);
     GetArrayVector3(cpinfo, CPZone_MinX, min);
     GetArrayVector3(cpinfo, CPZone_MaxX, max);
     
@@ -887,11 +830,8 @@ public void CP_CreateTriggerForCheckpoint(int checkpoint)
     STA_GetBoxSize(min, max, origin, localmin, localmax);
     
     char zonename[MAX_TARGET_LENGTH];
-    FormatEx(zonename, sizeof(zonename), "sta_zone_%d", checkpoint);
+    FormatEx(zonename, sizeof(zonename), "sta_zone_%d_%d", client, checkpoint);
     
-    /*
-        Flag 1 = Only clients
-    */
     DispatchKeyValue(newent, "spawnflags", "1");
     DispatchKeyValue(newent, "StartDisabled", "0");
     DispatchKeyValue(newent, "targetname", zonename);
@@ -900,57 +840,48 @@ public void CP_CreateTriggerForCheckpoint(int checkpoint)
     
     int zonetype = cpinfo[CPZone_ZoneType];
     
-    /*
-        We store our trigger data in render color to easily get its userdata in touch/leave hooks 
-    */
-    SetEntityRenderColor(newent, zonetype, checkpoint);
+    SetEntityRenderColor(newent, zonetype, checkpoint, client);
     
     DispatchSpawn(newent);
     ActivateEntity(newent);
     
-    /*
-        All these settings can only be changed after the entity is spawned
-    */
     DispatchKeyValueVector(newent, "origin", origin);
     DispatchKeyValueVector(newent, "mins", localmin);
     DispatchKeyValueVector(newent, "maxs", localmax);
     
-    /*
-        Flag 2 = SOLID_BBOX 
-    */
     DispatchKeyValue(newent, "solid", "2");
     
-    /*
-        Flag 32 = EF_NODRAW
-    */
     SetEntData(newent, Offsets_Effects, GetEntData(newent, Offsets_Effects) | 32);
     
     SDKHookEx(newent, SDKHook_StartTouch, CP_StartTouch);
     SDKHookEx(newent, SDKHook_EndTouch, CP_EndTouch);
 }
 
-public void STA_GetCheckpointBoundingBox(int checkpoint, float min[3], float max[3])
+public void STA_GetCheckpointBoundingBox(int client, int checkpoint, float min[3], float max[3])
 {
-    min[0] = GetArrayCell(STA_Checkpoints, checkpoint, CPZone_MinX);
-    min[1] = GetArrayCell(STA_Checkpoints, checkpoint, CPZone_MinY);
-    min[2] = GetArrayCell(STA_Checkpoints, checkpoint, CPZone_MinZ);
+    any cpinfo[CPZone_ArrayLength];
+    GetArrayArray(STA_Checkpoints[client], checkpoint, cpinfo, CPZone_ArrayLength);
     
-    max[0] = GetArrayCell(STA_Checkpoints, checkpoint, CPZone_MaxX);
-    max[1] = GetArrayCell(STA_Checkpoints, checkpoint, CPZone_MaxY);
-    max[2] = GetArrayCell(STA_Checkpoints, checkpoint, CPZone_MaxZ);
+    min[0] = cpinfo[CPZone_MinX];
+    min[1] = cpinfo[CPZone_MinY];
+    min[2] = cpinfo[CPZone_MinZ];
+    
+    max[0] = cpinfo[CPZone_MaxX];
+    max[1] = cpinfo[CPZone_MaxY];
+    max[2] = cpinfo[CPZone_MaxZ];
 }
 
-public void STA_DrawCheckpoint(int checkpoint)
+public void STA_DrawCheckpoint(int client, int checkpoint)
 {
     float points[8][3];
-    STA_PointsFromCheckpoint(checkpoint, points);    
+    STA_PointsFromCheckpoint(client, checkpoint, points);    
 }
 
-public void STA_PointsFromCheckpoint(int checkpoint, float points[8][3])
+public void STA_PointsFromCheckpoint(int client, int checkpoint, float points[8][3])
 {
     float mins[3];
     float maxs[3];
-    STA_GetCheckpointBoundingBox(checkpoint, mins, maxs);
+    STA_GetCheckpointBoundingBox(client, checkpoint, mins, maxs);
     
     STA_PointsFromBox(mins, maxs, points);
 }

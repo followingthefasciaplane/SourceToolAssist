@@ -73,7 +73,8 @@ public float SnapValueTo(float pos, int gridsize)
 		closest -= gridsize;
 	}
 	
-	return float(closest);
+	float close = float(closest);
+	return close;
 }
 
 public void SnapVectorTo(float pos[3], int gridsize)

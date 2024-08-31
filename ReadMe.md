@@ -1,6 +1,6 @@
 # Source Tool Assist
 
-Plugin helper for tool assists. Supports stitching a run together with rewind or tick by tick advancement. With replays on a bot and allows editing of that bot in spectator. Includes zones and tick timer.
+Plugin helper for tool assists. Supports stitching a run together with rewind or tick by tick advancement. With replays on a bot and allows editing of that bot in spectator. Includes zones and tick timer. Multi-player support added by Jesse. Supports up to 5 concurrent players and bots.
 
 ## Commands
 * **sm_sta** - Open main plugin menu. 
