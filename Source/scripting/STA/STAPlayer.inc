@@ -7,6 +7,9 @@
 #include "Vector.inc"
 #include "ReplayFrame.inc"
 
+
+#define MAX_BOTS 3
+#define MAX_QUEUE_SIZE 10
 /*
 	==============================================================
 */
@@ -630,6 +633,11 @@ public void STA_PrintMessageToClientSpectators(int client, const char[] format, 
 // Multiplayer
 
 bool g_BotInUse[MAXPLAYERS + 1];
+int g_BotQueue[MAX_QUEUE_SIZE];
+int g_QueueFront = 0;
+int g_QueueRear = -1;
+int g_QueueItemCount = 0;
+Handle g_hBotMutex; // This is the idea anyway
 
 public bool Player_IsBotInUse(int botId)
 {
@@ -640,6 +648,62 @@ public bool Player_IsBotInUse(int botId)
     return g_BotInUse[botId];
 }
 
+public bool Player_RequestBot(int client)
+{
+    
+    int availableBot = -1;
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (IsClientInGame(i) && IsFakeClient(i) && !Player_IsBotInUse(i))
+        {
+            availableBot = i;
+            break;
+        }
+    }
+    
+    if (availableBot != -1)
+    {
+        Player_SetBotInUse(availableBot, true);
+        Player_SetLinkedBotIndex(client, availableBot);
+        Bot_SetLinkedPlayerIndex(availableBot, client);
+        return true;
+    }
+    else if (g_QueueItemCount < MAX_QUEUE_SIZE)
+    {
+        g_QueueRear = (g_QueueRear + 1) % MAX_QUEUE_SIZE;
+        g_BotQueue[g_QueueRear] = client;
+        g_QueueItemCount++;
+        return false;
+    }
+    
+    return false;
+}
+
+public void Player_ReleaseBotAndProcessQueue(int botId)
+{
+    Player_SetBotInUse(botId, false);
+    int linkedPlayer = Bot_GetLinkedPlayerIndex(botId);
+    if (linkedPlayer != 0)
+    {
+        Player_SetLinkedBotIndex(linkedPlayer, 0);
+        Bot_SetLinkedPlayerIndex(botId, 0);
+        
+        if (g_QueueItemCount > 0)
+		{
+            int nextClient = g_BotQueue[g_QueueFront];
+            g_QueueFront = (g_QueueFront + 1) % MAX_QUEUE_SIZE;
+            g_QueueItemCount--;
+            
+            Player_SetBotInUse(botId, true);
+            Player_SetLinkedBotIndex(nextClient, botId);
+            Bot_SetLinkedPlayerIndex(botId, nextClient);
+            
+            // Notify the waiting client that a bot is now available
+            STA_PrintMessageToClient(nextClient, "A bot is now available for your replay request.");
+        }		
+    }
+}
+
 public void Player_SetBotInUse(int botId, bool inUse)
 {
     if (botId < 1 || botId > MaxClients)
@@ -647,6 +711,19 @@ public void Player_SetBotInUse(int botId, bool inUse)
         return;
     }
     g_BotInUse[botId] = inUse;
+}
+
+public void Player_InitializeBotSystem()
+{
+    for (int i = 0; i < MAX_BOTS; i++)
+    {
+        g_BotInUse[i] = false;
+    }
+}
+
+public void Player_ShutdownBotSystem()
+{
+	CloseHandle(g_hBotMutex);
 }
 
 public void Player_InitializeData(int client)
@@ -688,8 +765,7 @@ public void Player_CleanupData(int client)
     int botId = PlayerLinkedBotIndex[client];
     if (botId != 0)
     {
-        Player_SetBotInUse(botId, false);
-        Bot_SetLinkedPlayerIndex(botId, 0);
+		Player_ReleaseBotAndProcessQueue(botId);
     }
     
     PlayerLinkedBotIndex[client] = 0;
@@ -713,4 +789,22 @@ public void Player_CleanupData(int client)
     StartTimeReplayTick[client] = 0;
     HasFastForwardKeyDown[client] = false;
     HasRewindKeyDown[client] = false;
+}
+
+public bool Player_UpdateBotReplayData(int client, int botId)
+{
+    // Stop the current replay
+    Player_SetPlayingReplay(client, false);
+    
+    // Update the bot's position, angles, etc. to the first frame of the new replay
+    if (Player_GetRecordedFramesCount(client) > 0)
+    {
+        SetPlayerReplayFrame(client, botId, 0);
+    }
+    
+    // Start the new replay
+    Player_SetPlayingReplay(client, true);
+    Player_SetRewindFrame(client, 0);
+    
+    return true;
 }

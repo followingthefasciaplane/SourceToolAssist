@@ -28,19 +28,19 @@
 
 public Plugin myinfo = 
 {
-    name = "Source Tool Assist",
-    author = "crashfort",
+    name = "Source Tool Assist Multiplayer",
+    author = "crashfort, edited by jesse",
     description = "",
     version = "5",
     url = "https://google.se"
 };
 
-#define BOT_Count 5
+#define BOT_Count 3
 int BotIDs[BOT_Count];
 
 public void ResetPlayerReplaySegment(int client)
 {
-    if (client <= 0 || !IsClientInGame(client))
+    if (!IsClientInGame(client))
     {
         return;
     }
@@ -85,19 +85,15 @@ public int GetFreeBotID()
 }
 
 
-public void CreateBotForPlayer(int client)
+public bool CreateBotForPlayer(int client)
 {
-    int botIndex = GetFreeBotID();
-    if (botIndex == -1)
+    if (!Player_RequestBot(client))
     {
-        STA_PrintMessageToClient(client, "No free bots available.");
-        return;
+        STA_PrintMessageToClient(client, "No bots available. You've been added to the queue.");
+        return false;
     }
 
-    int botId = BotIDs[botIndex];
-    Player_SetLinkedBotIndex(client, botId);
-    Bot_SetLinkedPlayerIndex(botId, client);
-    Player_SetBotInUse(botId, true);
+    int botId = Player_GetLinkedBotIndex(client);
     
     bool onteam = IsPlayingOnTeam(client);
     
@@ -124,13 +120,20 @@ public void CreateBotForPlayer(int client)
     */
     SetEntityMoveType(botId, MOVETYPE_NOCLIP);
     SetEntityGravity(botId, 0.0);
+
+    return true;
 }
 
 public void RemoveBotFromPlayer(int client)
 {
-    int fakeid = Player_GetLinkedBotIndex(client);
-    ChangeClientTeam(fakeid, CS_TEAM_SPECTATOR);
+    int botId = Player_GetLinkedBotIndex(client);
+    if (botId != 0)
+    {
+        ChangeClientTeam(botId, CS_TEAM_SPECTATOR);
+        Player_ReleaseBotAndProcessQueue(botId);
+    }
 }
+
 
 public int MenuHandler_ReplaySelect(Menu menu, MenuAction action, int param1, int param2)
 {
@@ -395,7 +398,12 @@ public int MenuHandler_SegmentReplay(Menu menu, MenuAction action, int param1, i
                 Player_SetPlayingReplay(client, true);
                 Player_SetRewindFrame(client, 0);
                 
-                CreateBotForPlayer(client);
+                if (!CreateBotForPlayer(client))
+                {
+                    // Bot creation failed, likely due to no available bots
+                    STA_PrintMessageToClient(client, "Unable to create bot for replay. You've been added to the queue.");
+                    return 0;
+                }
                 
                 bool onteam = IsPlayingOnTeam(client);
                 
@@ -682,13 +690,13 @@ public void STA_OpenSegmentReplayMenu(int client)
 
 public Action STA_ManageReplays(int client, int args)
 {
-	if (!HandlePlayerPermission(client))
-	{
-		return Plugin_Handled;
-	}
-	
-	STA_OpenSegmentReplayMenu(client);
-	return Plugin_Handled;
+    if (!HandlePlayerPermission(client))
+    {
+        return Plugin_Handled;
+    }
+    
+    STA_OpenSegmentReplayMenu(client);
+    return Plugin_Handled;
 }
 
 public Action CS_OnTerminateRound(float& delay, CSRoundEndReason& reason)
@@ -860,6 +868,7 @@ public Action OnPlayerSpawn(Event event, const char[] name, bool dontbroadcast)
 {
     int userid = GetEventInt(event, "userid");
     int client = GetClientOfUserId(userid);
+    Player_InitializeData(client);
     
     // Disables player collision
     SetEntData(client, Offset_CollisionGroup, COLLISION_GROUP_DEBRIS_TRIGGER, 4, true);
@@ -880,6 +889,7 @@ public Action OnPlayerDisconnect(Event event, const char[] name, bool dontbroadc
     int client = GetClientOfUserId(userid);
     
     ResetPlayerReplaySegment(client);
+    Player_CleanupData(client);
 
     return Plugin_Continue; // Continue allowing other plugins to handle this event as well
 }
@@ -918,67 +928,52 @@ ConVar VariableTeleportDistance;
 
 public void OnPluginStart()
 {
-	char dirbuf[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, dirbuf, sizeof(dirbuf), "%s", STA_RootPath);
+    char dirbuf[PLATFORM_MAX_PATH];
+    BuildPath(Path_SM, dirbuf, sizeof(dirbuf), "%s", STA_RootPath);
 
-	if (!DirExists(dirbuf))
-		CreateDirectory(dirbuf, 511);
+    if (!DirExists(dirbuf))
+        CreateDirectory(dirbuf, 511);
 
-	BuildPath(Path_SM, dirbuf, sizeof(dirbuf), "%s/%s", STA_RootPath, STA_ReplayFolder);
+    BuildPath(Path_SM, dirbuf, sizeof(dirbuf), "%s/%s", STA_RootPath, STA_ReplayFolder);
 
-	if (!DirExists(dirbuf))
-		CreateDirectory(dirbuf, 511);
+    if (!DirExists(dirbuf))
+        CreateDirectory(dirbuf, 511);
 
-	BuildPath(Path_SM, dirbuf, sizeof(dirbuf), "%s/%s", STA_RootPath, STA_ZoneFolder);
+    BuildPath(Path_SM, dirbuf, sizeof(dirbuf), "%s/%s", STA_RootPath, STA_ZoneFolder);
 
-	if (!DirExists(dirbuf))
-		CreateDirectory(dirbuf, 511);
+    if (!DirExists(dirbuf))
+        CreateDirectory(dirbuf, 511);
 
-	RegConsoleCmd("sm_sta", STA_ManageReplays);
-	RegConsoleCmd("sm_respawn", STA_RespawnPlayer);
-	
-	RegConsoleCmd("sm_stepforward", STA_StepForward);
-	RegConsoleCmd("sm_stepback", STA_StepBack);
-	
-	RegConsoleCmd("+sm_rewind", STA_RewindDown);
-	RegConsoleCmd("-sm_rewind", STA_RewindUp);	
-	RegConsoleCmd("+sm_fastforward", STA_FastForwardDown);
-	RegConsoleCmd("-sm_fastforward", STA_FastForwardUp);
-	
-	HookEvent("player_spawn", OnPlayerSpawn);
-	HookEvent("player_disconnect", OnPlayerDisconnect, EventHookMode_Pre);
-	
-	Offsets_Init();
-	CP_Init();
-	
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		g_BotInUse[i] = false;
-	}
-	
-	VariableTeleportDistance = CreateConVar("sm_sta_teledist", "9216", "3D vector length that decides what a teleport is");
-}
-
-public void OnClientPutInServer(int client)
-{
-    Player_InitializeData(client);
-}
-
-public void OnClientDisconnect(int client)
-{
-    Player_CleanupData(client);
+    RegConsoleCmd("sm_sta", STA_ManageReplays);
+    RegConsoleCmd("sm_respawn", STA_RespawnPlayer);
+    
+    RegConsoleCmd("sm_stepforward", STA_StepForward);
+    RegConsoleCmd("sm_stepback", STA_StepBack);
+    
+    RegConsoleCmd("+sm_rewind", STA_RewindDown);
+    RegConsoleCmd("-sm_rewind", STA_RewindUp);    
+    RegConsoleCmd("+sm_fastforward", STA_FastForwardDown);
+    RegConsoleCmd("-sm_fastforward", STA_FastForwardUp);
+    
+    HookEvent("player_spawn", OnPlayerSpawn);
+    HookEvent("player_disconnect", OnPlayerDisconnect, EventHookMode_Pre);
+    
+    Offsets_Init();
+    CP_Init();
+    
+    Player_InitializeBotSystem();
+    
+    VariableTeleportDistance = CreateConVar("sm_sta_teledist", "9216", "3D vector length that decides what a teleport is");
 }
 
 public Action GetBotIDs(Handle timer)
 {
     int index = 0;
     
-    for (int i = 1; i <= MaxClients; i++) // Ensuring loop checks up to MaxClients inclusively
+    for (int i = 1; i <= MaxClients; i++)
     {
         if (IsClientInGame(i) && IsFakeClient(i) && !IsClientSourceTV(i))
         {
-            //PrintToServer("%d at index %d", i, index);
-            
             ChangeClientTeam(i, CS_TEAM_SPECTATOR);
             
             CS_SetClientClanTag(i, "[STA]");
@@ -993,49 +988,42 @@ public Action GetBotIDs(Handle timer)
         }
     }
     
-    return Plugin_Continue; // Suggested return value assuming you want other hooks to continue processing
+    return Plugin_Continue;
 }
 
 public void OnMapStart()
 {
-	ServerCommand("sv_cheats 1");
-	
-	ServerCommand("bot_chatter off");
-	ServerCommand("bot_stop 1");
-	
-	ServerCommand("bot_quota %d", BOT_Count);
-	ServerCommand("bot_zombie 1");
-	ServerCommand("bot_stop 1");
-	ServerCommand("mp_autoteambalance 0");
-	ServerCommand("bot_join_after_player 0");
-	ServerCommand("mp_limitteams 0");
+    ServerCommand("sv_cheats 1");
+    
+    ServerCommand("bot_chatter off");
+    ServerCommand("bot_stop 1");
+    
+    ServerCommand("bot_quota %d", BOT_Count);
+    ServerCommand("bot_zombie 1");
+    ServerCommand("bot_stop 1");
+    ServerCommand("mp_autoteambalance 0");
+    ServerCommand("bot_join_after_player 0");
+    ServerCommand("mp_limitteams 0");
 
-	ServerCommand("sv_force_transmit_ents 1"); //fixes replay bug
+    ServerCommand("sv_force_transmit_ents 1"); // Fixes replay bug
 
-	//ServerCommand("sv_maxusrcmdprocessticks 0"); //unpatches speedhacks. allows client to send less frames than tickrate
-	//ServerCommand("sv_max_usercmd_future_ticks 0"); //old school host_timescale, but timescale invalidates your run regardless
-
-	
-	/*
-		Don't let the bot commands be overwritten
-	*/
-	ServerExecute();
-	
-	CreateTimer(1.0, GetBotIDs);
-	//GetBotIDs();
-	CP_MapStartInit();
+    ServerExecute();
+    
+    CreateTimer(1.0, GetBotIDs);
+    CP_MapStartInit();
 }
 
 public void OnPluginEnd()
 {
-	ServerCommand("bot_quota 0");
+    ServerCommand("bot_quota 0");
+    Player_ShutdownBotSystem();
 }
 
 public void OnMapEnd()
 {
-	ServerCommand("bot_quota 0");
-	
-	CP_OnMapEnd();
+    ServerCommand("bot_quota 0");
+    
+    CP_OnMapEnd();
 }
 
 public void SetPlayerReplayFrame(int client, int targetclient, int frame)
