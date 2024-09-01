@@ -1,6 +1,15 @@
-# Source Tool Assist
+# Source Tool Assist MP
 
-Plugin helper for tool assists. Supports stitching a run together with rewind or tick by tick advancement. With replays on a bot and allows editing of that bot in spectator. Includes zones and tick timer. Multi-player support added by Jesse. Supports up to 5 concurrent players and bots.
+Credits: CRASH FORT.  
+
+# My fork:  
+
+- Experimental
+- Multi-player support
+- Dynamic bot allocation & queue system
+- User-independent zoning and checkpointing (needs testing)
+- Concurrent replay editing & viewing
+- Various small optimizations & refactors
 
 ## Commands
 * **sm_sta** - Open main plugin menu. 
@@ -14,3 +23,12 @@ Plugin helper for tool assists. Supports stitching a run together with rewind or
 
 ## Variables
 * **sm_sta_teledist** - Default: 9216. Maximum velocity length to signal a teleport.
+
+## Todo
+
+- Smooth out playback (it's floaty af)
+- Serverside demo creation
+- Lag compensation and prediction
+- Fix the many bugs I'm sure exist
+- Add collaborative TAS features
+- Extend predictive features and HUD feedback
