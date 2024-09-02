@@ -883,6 +883,23 @@ public Action OnPlayerSpawn(Event event, const char[] name, bool dontbroadcast)
     return Plugin_Continue; // Continue allowing other plugins to handle this event as well
 }
 
+bool g_hasPlayersRemaining;
+
+public Action OnNewPlayerConnect(Event event, const char[] name, bool dontbroadcast)
+{
+    if (!g_hasPlayersRemaining)
+    {
+        ServerCommand("bot_quota %d", BOT_Count);
+
+        ServerExecute();
+        
+        CreateTimer(0.1, GetBotIDs);
+        CP_MapStartInit();
+    }
+
+    return Plugin_Continue; // Continue allowing other plugins to handle this event as well
+}
+
 public Action OnPlayerDisconnect(Event event, const char[] name, bool dontbroadcast)
 {
     int userid = GetEventInt(event, "userid");
@@ -890,6 +907,21 @@ public Action OnPlayerDisconnect(Event event, const char[] name, bool dontbroadc
     
     ResetPlayerReplaySegment(client);
     Player_CleanupData(client);
+
+    int i;
+    g_hasPlayersRemaining = false;
+    for (i = 0; i <= MaxClients; i++)
+    {
+        if (!IsFakeClient(i))
+        {
+            g_hasPlayersRemaining = true;
+        }
+    }
+
+    if (!g_hasPlayersRemaining)
+    {
+        OnMapEnd();
+    }
 
     return Plugin_Continue; // Continue allowing other plugins to handle this event as well
 }
@@ -956,6 +988,7 @@ public void OnPluginStart()
     RegConsoleCmd("-sm_fastforward", STA_FastForwardUp);
     
     HookEvent("player_spawn", OnPlayerSpawn);
+    HookEvent("player_connect", OnNewPlayerConnect);
     HookEvent("player_disconnect", OnPlayerDisconnect, EventHookMode_Pre);
     
     Offsets_Init();
@@ -979,7 +1012,7 @@ public Action GetBotIDs(Handle timer)
             CS_SetClientClanTag(i, "[STA]");
             
             char namebuf[MAX_NAME_LENGTH];            
-            FormatEx(namebuf, sizeof(namebuf), "crashfort/SourceToolAssist");
+            FormatEx(namebuf, sizeof(namebuf), "TASBot");
             
             SetClientName(i, namebuf);
             
