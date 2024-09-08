@@ -912,9 +912,12 @@ public Action OnPlayerDisconnect(Event event, const char[] name, bool dontbroadc
     g_hasPlayersRemaining = false;
     for (i = 1; i <= MaxClients; i++)
     {
-        if (!IsFakeClient(i))
+        if (IsClientConnected(client))
         {
-            g_hasPlayersRemaining = true;
+            if (!IsFakeClient(i))
+            {
+                g_hasPlayersRemaining = true;
+            }
         }
     }
 
