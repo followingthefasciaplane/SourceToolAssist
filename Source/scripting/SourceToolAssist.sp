@@ -910,7 +910,7 @@ public Action OnPlayerDisconnect(Event event, const char[] name, bool dontbroadc
 
     int i;
     g_hasPlayersRemaining = false;
-    for (i = 0; i <= MaxClients; i++)
+    for (i = 1; i <= MaxClients; i++)
     {
         if (!IsFakeClient(i))
         {
