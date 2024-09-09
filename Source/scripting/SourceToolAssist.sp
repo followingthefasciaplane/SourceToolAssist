@@ -905,18 +905,21 @@ public Action OnPlayerDisconnect(Event event, const char[] name, bool dontbroadc
     int userid = GetEventInt(event, "userid");
     int client = GetClientOfUserId(userid);
     
-    ResetPlayerReplaySegment(client);
-    Player_CleanupData(client);
-
-    int i;
-    g_hasPlayersRemaining = false;
-    for (i = 1; i <= MaxClients; i++)
+    if(client != 0)
     {
-        if (IsClientConnected(client))
+        ResetPlayerReplaySegment(client);
+        Player_CleanupData(client);
+    }
+
+    g_hasPlayersRemaining = false;
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (IsClientConnected(i))
         {
             if (!IsFakeClient(i))
             {
                 g_hasPlayersRemaining = true;
+                break;  
             }
         }
     }
@@ -926,7 +929,7 @@ public Action OnPlayerDisconnect(Event event, const char[] name, bool dontbroadc
         OnMapEnd();
     }
 
-    return Plugin_Continue; // Continue allowing other plugins to handle this event as well
+    return Plugin_Continue;
 }
 
 public void OnEntityCreated(int entity, const char[] classname)
